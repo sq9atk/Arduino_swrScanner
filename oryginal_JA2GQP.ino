@@ -1,7 +1,5 @@
 #include <Ucglib.h>
-
 #include < SPI.h > 
-
 
 
 const int FQ_UD = 11; //A1)DDS Pin Assign JA2GQP
@@ -26,7 +24,6 @@ double _frqStop = 30; // Stop Frequency for sweep
 double _currFrq; // Temp variable used during sweep
 
 Ucglib_ILI9341_18x240x320_SWSPI ucg(8, 7, 6, 5, 4); // sclk,data,cd,cs,reset 
-
 
 
 void setup() {
@@ -75,43 +72,17 @@ void loop() {
 
 
 
+int _gridXMin = 17;  
+int _gridXMax = 319;  
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-int _gridXMin = 130;
-int _gridXMax = 290;
-
-int _gridYMin = 75;
-int _gridYMax = 170;
+int _gridYMin = 19;
+int _gridYMax = 222;
 
 int _gridWidth = _gridXMax - _gridXMin;
 int _gridHeight = _gridYMax - _gridYMin;
 
 int _raster = 5;
 int _steps = _gridWidth / _raster; 
-
-
-
 
 double scaleY(double val){
   return _gridYMax - val * _gridHeight / 10;
@@ -171,9 +142,6 @@ void Perform_sweep() {
 void drawLine(int x1, int y1, int x2, int y2) {
     ucg.drawLine(x1, y1, x2, y2);
 }
-
-
-
 
 
 void prepareDisplay() {
@@ -284,7 +252,6 @@ void button1() {
     refreshValues();
     refreshScale();
 }
-
 
 void button2() {
     _mils = millis(); //Entprellen mit millis()
