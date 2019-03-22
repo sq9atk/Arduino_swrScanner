@@ -248,7 +248,7 @@ void printLabels() {
     ucg.setPrintPos(_gridXMin - 10, y2 + 5); ucg.print("2");
     ucg.setPrintPos(_gridXMin - 10, y3 + 5); ucg.print("3");
     ucg.setPrintPos(_gridXMin - 10, y5 + 5); ucg.print("5");
-    ucg.setPrintPos(_gridXMin - 16, _gridYMin + 5); ucg.print("10");
+    ucg.setPrintPos(_gridXMin - 16, _gridYMin + 12); ucg.print("10");
 }
 
 void printScale() {
@@ -276,7 +276,7 @@ void refreshValues() {
 
     ucg.setColor(255, 255, 0);
     ucg.setPrintPos(209, vShift);
-    ucg.print(_lowestSwrFrq, _lowestSwrFrq < 10 ? 3 : 2);
+    ucg.print(_lowestSwrFrq, 2);
 }
 
 double checkSWR() {
