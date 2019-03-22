@@ -31,7 +31,7 @@ int _gridYMax = 210;
 int _gridWidth = _gridXMax - _gridXMin;
 int _gridHeight = _gridYMax - _gridYMin;
 
-int _raster = 3;
+int _raster = 4;
 int _steps = _gridWidth / _raster; 
 
 
@@ -101,7 +101,7 @@ void PerformScan() {
     int Y2 = 1;
     
     
-    for (int i = 0; i < _steps; i++) {
+    for (int i = 1; i < _steps; i++) {
         _currFrq = _frqStart + frqStep * i;
 
         DDS_SetFrq(_currFrq);
@@ -114,19 +114,34 @@ void PerformScan() {
         }
 
         // zamazanie starego wykresu
-        ucg.setColor(0, 0, 0);
+        
         Y = scaleY(prev2);
         Y2 = scaleY(prevs[i]);
-        drawLine(X, Y, X + _raster, Y2);
-        prev2 = prevs[i];
+
+
+		if (Y == _gridYMin && Y2 == _gridYMin){
+			
+		} else {
+			ucg.setColor(0, 0, 0);
+		    drawLine(X, Y, X + _raster, Y2);
+		    prev2 = prevs[i];
+		}
         
 
         // rysowanie nowego wykresu
-        ucg.setColor(255, 255, 0);
+        
         Y = scaleY(prev);
         Y2 = scaleY(swr);
-        drawLine(X, Y, X + _raster, Y2);
-        prev = fix = swr;
+
+		if (Y == _gridYMin && Y2 == _gridYMin){
+			
+		} else {
+			ucg.setColor(255, 255, 0);
+            drawLine(X, Y, X + _raster, Y2);
+            prev = fix = swr;
+        }
+
+        
 
         X += _raster;
 
