@@ -1,6 +1,5 @@
+#include <SPI.h> 
 #include <Ucglib.h>
-#include < SPI.h > 
-
 
 const int FQ_UD = 11; //A1)DDS Pin Assign JA2GQP
 const int SDAT = 10; //zzz
@@ -16,9 +15,6 @@ double _frqLow = 1; // Freq. Links unterste Zeile Display
 double _frqMid = 15; // Freq. Mitte unterste Zeile Display
 double _frqHigh = 30; // Freq. Mitte unterste Zeile Display
 
-long _mils2 = 0; //Millisekunden für Entprellung Interrupt
-long _mils = 0; //Millisekunden für Entprellung Interrupt
-
 double _frqStart = 1; // Start Frequency for sweep
 double _frqStop = 30; // Stop Frequency for sweep
 double _currFrq; // Temp variable used during sweep
@@ -26,8 +22,20 @@ double _currFrq; // Temp variable used during sweep
 Ucglib_ILI9341_18x240x320_SWSPI ucg(8, 7, 6, 5, 4); // sclk,data,cd,cs,reset 
 
 
-void setup() {
+int _gridXMin = 17;  
+int _gridXMax = 317;  
 
+int _gridYMin = 19;
+int _gridYMax = 210;
+
+int _gridWidth = _gridXMax - _gridXMin;
+int _gridHeight = _gridYMax - _gridYMin;
+
+int _raster = 3;
+int _steps = _gridWidth / _raster; 
+
+
+void setup() {
     ucg.begin(UCG_FONT_MODE_SOLID);
 
     ucg.setRotate90();
@@ -39,56 +47,45 @@ void setup() {
     pinMode(RESET, OUTPUT);
 
     pinMode(2, OUTPUT);
-    digitalWrite(2, HIGH);
-    attachInterrupt(0, button1, FALLING);
-    
-    _mils2 = millis();
-
     pinMode(3, OUTPUT);
+    digitalWrite(2, HIGH);
     digitalWrite(3, HIGH);
-    attachInterrupt(1, button2, FALLING);
+    attachInterrupt(0, buttonA, FALLING);
+    attachInterrupt(1, buttonB, FALLING);
 
-    // Configure LED pin for digital output
     pinMode(13, OUTPUT);
 
-    pinMode(A0, INPUT); // Set up analog inputs on A0 and A1
+    pinMode(A0, INPUT);
     pinMode(A1, INPUT);
-    analogReference(INTERNAL); //internal reference voltage
-
-    Serial.begin(57600); // initialize serial communication at 57600 baud
+    analogReference(INTERNAL); 
 
     DDS_init();
 
-    ucg.clearScreen();
-    drawGrid();
-    printLabels();
-    refreshValues();
-    refreshScale();
+    prepareDisplay();
 }
+
+int btnAflag = 0;
+int btnBflag = 0;
 
 void loop() {
-    Perform_sweep();
+    if (btnAflag == 1) {
+        btnAflag = 0;
+        btnBflag = 0;
+        setFullBand();
+        printScale();
+    } 
+    
+    if (btnBflag == 1) {
+        btnAflag = 0;
+        btnBflag = 0;
+        setMinSwrBand();
+        printScale();
+    } 
+
+    PerformScan();
 }
 
-
-
-int _gridXMin = 17;  
-int _gridXMax = 319;  
-
-int _gridYMin = 19;
-int _gridYMax = 222;
-
-int _gridWidth = _gridXMax - _gridXMin;
-int _gridHeight = _gridYMax - _gridYMin;
-
-int _raster = 5;
-int _steps = _gridWidth / _raster; 
-
-double scaleY(double val){
-  return _gridYMax - val * _gridHeight / 10;
-}
-
-void Perform_sweep() {
+void PerformScan() {
     double frqStep = (_frqStop - _frqStart) / _steps;
     double prev = 10;
     double prev2 = 10;
@@ -103,6 +100,7 @@ void Perform_sweep() {
     int Y = 1;
     int Y2 = 1;
     
+    
     for (int i = 0; i < _steps; i++) {
         _currFrq = _frqStart + frqStep * i;
 
@@ -115,13 +113,15 @@ void Perform_sweep() {
             _lowestSwrFrq = _currFrq;
         }
 
+        // zamazanie starego wykresu
         ucg.setColor(0, 0, 0);
         Y = scaleY(prev2);
         Y2 = scaleY(prevs[i]);
         drawLine(X, Y, X + _raster, Y2);
         prev2 = prevs[i];
+        
 
-
+        // rysowanie nowego wykresu
         ucg.setColor(255, 255, 0);
         Y = scaleY(prev);
         Y2 = scaleY(swr);
@@ -130,26 +130,62 @@ void Perform_sweep() {
 
         X += _raster;
 
-        
         prevs[i] = swr;
-
-        Serial.println(swr);
     }
 
     refreshValues();
+}
+
+double scaleY(double val){
+  return _gridYMax - val * _gridHeight / 10;
 }
 
 void drawLine(int x1, int y1, int x2, int y2) {
     ucg.drawLine(x1, y1, x2, y2);
 }
 
+void buttonA() {
+    if (btnAflag == 0) {
+        btnAflag = 1;
+    }
+}
+
+void buttonB() {
+    if (btnBflag == 0) {
+        btnBflag = 1;
+    }
+}
+
+void setFullBand() {
+    _frqStart = 1;
+    _frqStop = 30; 
+    
+    _frqLow = 1; 
+    _frqMid = 15; 
+    _frqHigh = 30;
+
+    _lowestSwrFrq = 0; 
+    _lowestSwr = 0;
+}
+
+void setMinSwrBand() {
+    _frqStart = _lowestSwrFrq - 1; 
+    _frqStop = _lowestSwrFrq + 1; 
+
+    _frqLow = _lowestSwrFrq - 1; 
+    _frqMid = _lowestSwrFrq; 
+    _frqHigh = _lowestSwrFrq + 1; 
+
+    _lowestSwrFrq = 0;
+    _lowestSwr = 0;
+}
 
 void prepareDisplay() {
     ucg.clearScreen();
     drawGrid();
     printLabels();
+    printScale();
     refreshValues();
-    refreshScale();
 }
 
 void drawGrid() {
@@ -187,7 +223,6 @@ void printLabels() {
     ucg.setPrintPos(200, vShift); ucg.print("@");
     ucg.setPrintPos(247, vShift); ucg.print("MHz");
     
-    
     // z lewej strony
     int y1 = _gridYMax - _gridHeight / 10 * 1;
     int y2 = _gridYMax - _gridHeight / 10 * 2;
@@ -201,8 +236,22 @@ void printLabels() {
     ucg.setPrintPos(_gridXMin - 16, _gridYMin + 5); ucg.print("10");
 }
 
+void printScale() {
+    // pod wykresem
+    ucg.setColor(220, 220, 220);
+    int vSpace = 14;
+
+    ucg.setPrintPos(_gridXMin, _gridYMax + vSpace);
+    ucg.print(_frqLow, _frqLow < 10 ? 2 : 1);
+
+    ucg.setPrintPos((_gridXMax+_gridXMin)/2-13,  _gridYMax + vSpace);
+    ucg.print(_frqMid, _frqMid < 10 ? 2 : 1);
+
+    ucg.setPrintPos(_gridXMax-30,  _gridYMax + vSpace);
+    ucg.print(_frqHigh, (_frqHigh < 10 ? 2 : 1));
+}
+
 void refreshValues() {
-    
     // nad wykresem
     int vShift = 15;
     ucg.setColor(255, 255, 0);
@@ -213,71 +262,6 @@ void refreshValues() {
     ucg.setColor(255, 255, 0);
     ucg.setPrintPos(209, vShift);
     ucg.print(_lowestSwrFrq, _lowestSwrFrq < 10 ? 3 : 2);
-}
-
-void refreshScale() {
-    ucg.setColor(220, 220, 220);
-    int vSpace = 14;
-
-    ucg.setPrintPos(_gridXMin, _gridYMax + vSpace);
-    ucg.print(_frqLow, _frqLow < 10 ? 2 : 1);
-
-    ucg.setPrintPos((_gridXMax+_gridXMin)/2-13,  _gridYMax + vSpace);
-    ucg.print(_frqMid, _frqMid < 10 ? 2 : 1);
-
-    ucg.setPrintPos(_gridXMax-28,  _gridYMax + vSpace);
-    ucg.print(_frqHigh, (_frqHigh < 10 ? 2 : 1));
-}
-
-void button1() {
-    _mils = millis();
-    if (_mils - _mils2 < 1000) {
-        _mils2 = _mils;
-        return;
-    } 
-    _mils2 = _mils;
-
-    _frqStart = 1; // Start Frequency for sweep
-    _frqStop = 30; // Stop Frequency for sweep
-    _frqLow = 1; // Unterste Zeile Display Freq. Links
-    _frqMid = 15; // Unterste Zeile Display Freq. Mitte
-    _frqHigh = 30;
-
-    _lowestSwrFrq = 0;
-    _lowestSwr = 0;
-
-    ucg.clearScreen();
-    drawGrid();
-    printLabels();
-    refreshValues();
-    refreshScale();
-}
-
-void button2() {
-    _mils = millis(); //Entprellen mit millis()
-    if (_mils - _mils2 < 1000) {
-        _mils2 = _mils;
-        return;
-    }
-    _mils2 = _mils;
-
-    int x = _lowestSwrFrq + 0.5; //Runde auf Mhz
-
-    _frqStart = x - 1; // Start Frequency for sweep
-    _frqStop = x + 1; // Stop Frequency for sweep
-
-    _frqLow = x - 1; // Unterste Zeile Display Freq. Links
-    _frqMid = x; // Unterste Zeile Display Freq. Mitte
-    _frqHigh = x + 1; // Unterste Zeile Display Freq. Rechts
-
-    _lowestSwrFrq = 0;
-    _lowestSwr = 0;
-
-    ucg.clearScreen();
-    drawGrid();
-    printLabels();
-    refreshValues();
-    refreshScale();
 }
 
 double checkSWR() {
