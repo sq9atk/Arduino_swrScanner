@@ -30,8 +30,17 @@ int _gridYMax = 224;
 int _gridWidth = _gridXMax - _gridXMin;
 int _gridHeight = _gridYMax - _gridYMin;
 
-int _raster = 4;
+int _raster = 3;
 int _steps = _gridWidth / _raster; 
+
+double corr2 = 2.0; // kalibruj na 2 przy 100 omach
+double corr3 = -0.43; // kalibruj na 3 przy 150 omach
+double corr4 = -0.12;  // kalibruj na 4 przy 200 omach
+double corr5 = 0.3; // kalibruj na 5 przy 450 omach
+
+double _frqLow = _frqStart; 
+double _frqMid = (_frqStart + _frqStop) / 2; 
+double _frqHigh = _frqStop;
 
 void setup() {
     ucg.begin(UCG_FONT_MODE_SOLID);
@@ -62,7 +71,6 @@ void setup() {
     prepareDisplay();
     setFullBandScan();
 }
-
 
 int btnAflag = 0;
 int btnBflag = 0;
@@ -95,14 +103,10 @@ void loop() {
     PerformScan();
 }
 
-double _frqLow = _frqStart; 
-double _frqMid = (_frqStart + _frqStop) / 2; 
-double _frqHigh = _frqStop;
-
 void setFullBandScan() {
     
-    ucg.setColor(0, 200, 0);
-    ucg.setPrintPos(240, _labelsVShift); ucg.print("Full-band");
+    ucg.setColor(0, 255, 0);
+    ucg.setPrintPos(255, _labelsVShift); ucg.print("Full-band");
     
     _frqStart = 1;
     _frqStop = 30; 
@@ -116,13 +120,12 @@ void setFullBandScan() {
 }
 
 void setMinSwrBandScan() {
-    
     if (_lowestSwrFrq < 2 || _lowestSwrFrq > 29) {
         _lowestSwrFrq = 15;
     }
     
     ucg.setColor(255, 0, 0);
-    ucg.setPrintPos(240, _labelsVShift); ucg.print("Min-SWR  ");
+    ucg.setPrintPos(255, _labelsVShift); ucg.print("  Min-SWR");
         
     _frqStart = _lowestSwrFrq - 1; 
     _frqStop = _lowestSwrFrq + 1; 
@@ -194,7 +197,6 @@ void drawLine(int x1, int y1, int x2, int y2) {
 }
 
 
-
 void prepareDisplay() {
     ucg.clearScreen();
     drawGrid();
@@ -204,12 +206,12 @@ void prepareDisplay() {
 }
 
 void drawGrid() {
-    ucg.setColor(200, 200, 200);
+    ucg.setColor(255, 255, 255);
     
     // ramka
     ucg.drawRFrame(_gridXMin, _gridYMin, _gridWidth, _gridHeight, 1);
     
-    ucg.setColor(0, 170, 0);
+    ucg.setColor(0, 200, 0);
     // poziome
     int y2 = _gridYMax - _gridHeight / 9 * 1;
     int y3 = _gridYMax - _gridHeight / 9 * 2;
@@ -232,10 +234,10 @@ void drawGrid() {
 
 void printLabels() {
     // nad wykresem
-    ucg.setColor(220, 220, 220);
-    ucg.setPrintPos(26, _labelsVShift); ucg.print("MIN-SWR 1:");
-    ucg.setPrintPos(140, _labelsVShift); ucg.print("@");
-    ucg.setPrintPos(187, _labelsVShift); ucg.print("MHz");
+    ucg.setColor(255, 255, 255);
+    ucg.setPrintPos(18, _labelsVShift); ucg.print("MIN-SWR 1:");
+    ucg.setPrintPos(123, _labelsVShift); ucg.print("@");
+    ucg.setPrintPos(165, _labelsVShift); ucg.print("MHz");
 
     // z lewej strony
     int y2 = (_gridYMax - _gridHeight / 9 * 1)+3;
@@ -253,17 +255,18 @@ void refreshValues() {
     // nad wykresem
     ucg.setColor(255, 255, 0);
 
-    ucg.setPrintPos(98, _labelsVShift);
-    ucg.print(_lowestSwr, 2);
+    ucg.setPrintPos(90, _labelsVShift);
+    ucg.print(_lowestSwr, (_lowestSwr < 10 ? 2 : 1));
 
     ucg.setColor(255, 255, 0);
-    ucg.setPrintPos(149, _labelsVShift);
-    ucg.print(_lowestSwrFrq, 2);
+    ucg.setPrintPos(133, _labelsVShift);
+    ucg.print(_lowestSwrFrq, (_lowestSwrFrq < 10 ? 2 : 1));
 }
 
 void printScale() {
     // pod wykresem
-    ucg.setColor(220, 220, 220);
+    ucg.setColor(255, 255, 255);
+    ucg.setColor(255, 255, 255);
     int vSpace = 14;
 
     ucg.setPrintPos(_gridXMin, _gridYMax + vSpace);
@@ -285,16 +288,26 @@ double checkSWR( double _currFrq) {
     double REF = 0;
     double SWR = 10;
     
-    REF = analogRead(A0);
+    REF = analogRead(A0) - 2;
     FWD = analogRead(A1);
-
-    REF -= 10; // Offset Correction
+    
     REF = REF >= FWD ? FWD - 1 : REF;
     REF = REF < 1 ? 1 : REF;
 
     SWR = (FWD + REF) / (FWD - REF);
+    
+    SWR = SWRcalibrator(SWR);
 
     return SWR > 10 ? 10 : SWR;
+}
+
+double SWRcalibrator(double swr) {
+    swr += (swr - 1) > 0  ?  (swr - 1) * corr2  :  0; // 2
+    swr += (swr - 2) > 0  ?  (swr - 2) * corr3  :  0; // 3
+    swr += (swr - 3) > 0  ?  (swr - 3) * corr4  :  0; // 4
+    swr += (swr - 4) > 0  ?  (swr - 4) * corr5  :  0; // 5
+    
+    return swr;
 }
 
 void DDS_init() {
