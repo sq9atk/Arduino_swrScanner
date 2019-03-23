@@ -1,39 +1,37 @@
 #include <SPI.h> 
 #include <Ucglib.h>
 
-const int FQ_UD = 11; //A1)DDS Pin Assign JA2GQP
-const int SDAT = 10; //zzz
-const int SCLK = 12; //
-const int RESET = 9; //
+const int FQ_UD = 11; 
+const int SDAT = 10; 
+const int SCLK = 12; 
+const int RESET = 9; 
 
-double prevs[120]; //Array für SWR
+double prevs[120] = {10};
 
-double _lowestSwrFrq = 0; // Variable für Freq. mit SWR Min.
-double _lowestSwr = 0; // Variable für SWR Min.
+double _lowestSwrFrq = 0; 
+double _lowestSwr = 0; 
 
-double _frqLow = 1; // Freq. Links unterste Zeile Display
-double _frqMid = 15; // Freq. Mitte unterste Zeile Display
-double _frqHigh = 30; // Freq. Mitte unterste Zeile Display
+double _frqStart = 1; 
+double _frqStop = 30; 
 
-double _frqStart = 1; // Start Frequency for sweep
-double _frqStop = 30; // Stop Frequency for sweep
-double _currFrq; // Temp variable used during sweep
+double _currFrq; 
+
+int _labelsVShift = 11;
 
 Ucglib_ILI9341_18x240x320_SWSPI ucg(8, 7, 6, 5, 4); // sclk,data,cd,cs,reset 
 
 
-int _gridXMin = 17;  
-int _gridXMax = 317;  
+int _gridXMin = 16;  
+int _gridXMax = 320;  
 
-int _gridYMin = 19;
-int _gridYMax = 210;
+int _gridYMin = 15;
+int _gridYMax = 224;
 
 int _gridWidth = _gridXMax - _gridXMin;
 int _gridHeight = _gridYMax - _gridYMin;
 
 int _raster = 4;
 int _steps = _gridWidth / _raster; 
-
 
 void setup() {
     ucg.begin(UCG_FONT_MODE_SOLID);
@@ -50,8 +48,8 @@ void setup() {
     pinMode(3, OUTPUT);
     digitalWrite(2, HIGH);
     digitalWrite(3, HIGH);
-    attachInterrupt(0, buttonA, FALLING);
-    attachInterrupt(1, buttonB, FALLING);
+    attachInterrupt(0, INT_buttonA, FALLING);
+    attachInterrupt(1, INT_buttonB, FALLING);
 
     pinMode(13, OUTPUT);
 
@@ -62,116 +60,50 @@ void setup() {
     DDS_init();
 
     prepareDisplay();
+    setFullBandScan();
 }
+
 
 int btnAflag = 0;
 int btnBflag = 0;
+
+void INT_buttonA() {
+    btnAflag = 1;
+}
+
+void INT_buttonB() {
+    btnBflag = 1;
+}
 
 void loop() {
     if (btnAflag == 1) {
         btnAflag = 0;
         btnBflag = 0;
-        setFullBand();
+        
+        setFullBandScan();
         printScale();
     } 
     
     if (btnBflag == 1) {
         btnAflag = 0;
         btnBflag = 0;
-        setMinSwrBand();
+        
+        setMinSwrBandScan();
         printScale();
     } 
 
     PerformScan();
 }
 
-void PerformScan() {
-    double frqStep = (_frqStop - _frqStart) / _steps;
-    double prev = 10;
-    double prev2 = 10;
-    double fix = 0;
-    double swr;
+double _frqLow = _frqStart; 
+double _frqMid = (_frqStart + _frqStop) / 2; 
+double _frqHigh = _frqStop;
+
+void setFullBandScan() {
     
-    drawGrid();
+    ucg.setColor(0, 200, 0);
+    ucg.setPrintPos(240, _labelsVShift); ucg.print("Full-band");
     
-    _lowestSwr = 10;
-    
-    int X = _gridXMin + 1;
-    int Y = 1;
-    int Y2 = 1;
-    
-    
-    for (int i = 1; i < _steps; i++) {
-        _currFrq = _frqStart + frqStep * i;
-
-        DDS_SetFrq(_currFrq);
-
-        swr = checkSWR();
-        
-        if (swr < _lowestSwr && swr > 1) { //Minimum SWR
-            _lowestSwr = swr; //Minimum SWR and frequency store
-            _lowestSwrFrq = _currFrq;
-        }
-
-        // zamazanie starego wykresu
-        
-        Y = scaleY(prev2);
-        Y2 = scaleY(prevs[i]);
-
-
-		if (Y == _gridYMin && Y2 == _gridYMin){
-			
-		} else {
-			ucg.setColor(0, 0, 0);
-		    drawLine(X, Y, X + _raster, Y2);
-		    prev2 = prevs[i];
-		}
-        
-
-        // rysowanie nowego wykresu
-        
-        Y = scaleY(prev);
-        Y2 = scaleY(swr);
-
-		if (Y == _gridYMin && Y2 == _gridYMin){
-			
-		} else {
-			ucg.setColor(255, 255, 0);
-            drawLine(X, Y, X + _raster, Y2);
-            prev = fix = swr;
-        }
-
-        
-
-        X += _raster;
-
-        prevs[i] = swr;
-    }
-
-    refreshValues();
-}
-
-double scaleY(double val){
-  return _gridYMax - val * _gridHeight / 10;
-}
-
-void drawLine(int x1, int y1, int x2, int y2) {
-    ucg.drawLine(x1, y1, x2, y2);
-}
-
-void buttonA() {
-    if (btnAflag == 0) {
-        btnAflag = 1;
-    }
-}
-
-void buttonB() {
-    if (btnBflag == 0) {
-        btnBflag = 1;
-    }
-}
-
-void setFullBand() {
     _frqStart = 1;
     _frqStop = 30; 
     
@@ -183,7 +115,15 @@ void setFullBand() {
     _lowestSwr = 0;
 }
 
-void setMinSwrBand() {
+void setMinSwrBandScan() {
+    
+    if (_lowestSwrFrq < 2 || _lowestSwrFrq > 29) {
+        _lowestSwrFrq = 15;
+    }
+    
+    ucg.setColor(255, 0, 0);
+    ucg.setPrintPos(240, _labelsVShift); ucg.print("Min-SWR  ");
+        
     _frqStart = _lowestSwrFrq - 1; 
     _frqStop = _lowestSwrFrq + 1; 
 
@@ -194,6 +134,66 @@ void setMinSwrBand() {
     _lowestSwrFrq = 0;
     _lowestSwr = 0;
 }
+
+void PerformScan() {
+    double frqStep = (_frqStop - _frqStart) / _steps;
+    double prev = 10;
+    double prev2 = 10;
+    double fix = 10;
+    double swr;
+    
+    drawGrid();
+    
+    _lowestSwr = 10;
+    
+    int X = _gridXMin + 1;
+    int Y = 1;
+    int Y2 = 1;
+    
+    for (int i = 1; i < _steps; i++) {
+        _currFrq = _frqStart + frqStep * i;
+
+        swr = checkSWR(_currFrq);
+        
+        if (swr < _lowestSwr && swr > 1) {
+            _lowestSwr = swr;
+            _lowestSwrFrq = _currFrq;
+        }
+        
+
+        // zamazanie starego wykresu
+        Y = scaleY(prev2);
+        Y2 = scaleY(prevs[i]);
+        ucg.setColor(0, 0, 0);
+        drawLine(X, Y, X + _raster, Y2);
+        prev2 = prevs[i];
+		
+        // rysowanie nowego wykresu
+        Y = scaleY(prev);
+        Y2 = scaleY(swr);
+        ucg.setColor(255, 255, 0);
+        drawLine(X, Y, X + _raster, Y2);
+        prev = fix = swr;
+
+        X += _raster;
+        prevs[i] = swr;
+    }
+
+    refreshValues();
+}
+
+int scaleY(double swr){
+  int Y = _gridYMax - (swr-1) * _gridHeight / 9;
+  if (Y <= _gridYMin) Y = _gridYMin + 1;
+  if (Y >= _gridYMax - 3) Y = _gridYMax - 3;
+  return Y;
+}
+
+void drawLine(int x1, int y1, int x2, int y2) {
+    ucg.drawLine(x1, y1, x2, y2);
+}
+
+
 
 void prepareDisplay() {
     ucg.clearScreen();
@@ -206,13 +206,15 @@ void prepareDisplay() {
 void drawGrid() {
     ucg.setColor(200, 200, 200);
     
+    // ramka
+    ucg.drawRFrame(_gridXMin, _gridYMin, _gridWidth, _gridHeight, 1);
+    
+    ucg.setColor(0, 170, 0);
     // poziome
-    int y1 = _gridYMax - _gridHeight / 10 * 1;
-    int y2 = _gridYMax - _gridHeight / 10 * 2;
-    int y3 = _gridYMax - _gridHeight / 10 * 3;
-    int y5 = _gridYMax - _gridHeight / 10 * 5;
+    int y2 = _gridYMax - _gridHeight / 9 * 1;
+    int y3 = _gridYMax - _gridHeight / 9 * 2;
+    int y5 = _gridYMax - _gridHeight / 9 * 4;
 
-    ucg.drawHLine(_gridXMin, y1, _gridWidth); //swr 1
     ucg.drawHLine(_gridXMin, y2, _gridWidth); //swr 2
     ucg.drawHLine(_gridXMin, y3, _gridWidth); //swr 3
     ucg.drawHLine(_gridXMin, y5, _gridWidth); //swr 5
@@ -226,29 +228,37 @@ void drawGrid() {
     ucg.drawVLine(x1, _gridYMin, _gridHeight);
     ucg.drawVLine(x2, _gridYMin, _gridHeight);
     ucg.drawVLine(x3, _gridYMin, _gridHeight);
-    // ramka
-    ucg.drawRFrame(_gridXMin, _gridYMin, _gridWidth, _gridHeight, 1);
 }
 
 void printLabels() {
     // nad wykresem
-    int vShift = 15;
     ucg.setColor(220, 220, 220);
-    ucg.setPrintPos(26, vShift); ucg.print("MIN SWR 1:");
-    ucg.setPrintPos(200, vShift); ucg.print("@");
-    ucg.setPrintPos(247, vShift); ucg.print("MHz");
-    
+    ucg.setPrintPos(26, _labelsVShift); ucg.print("MIN-SWR 1:");
+    ucg.setPrintPos(140, _labelsVShift); ucg.print("@");
+    ucg.setPrintPos(187, _labelsVShift); ucg.print("MHz");
+
     // z lewej strony
-    int y1 = _gridYMax - _gridHeight / 10 * 1;
-    int y2 = _gridYMax - _gridHeight / 10 * 2;
-    int y3 = _gridYMax - _gridHeight / 10 * 3;
-    int y5 = _gridYMax - _gridHeight / 10 * 5;
+    int y2 = (_gridYMax - _gridHeight / 9 * 1)+3;
+    int y3 = (_gridYMax - _gridHeight / 9 * 2)+3;
+    int y5 = (_gridYMax - _gridHeight / 9 * 4)+3;
     
-    ucg.setPrintPos(_gridXMin - 10, y1 + 5); ucg.print("1");
-    ucg.setPrintPos(_gridXMin - 10, y2 + 5); ucg.print("2");
-    ucg.setPrintPos(_gridXMin - 10, y3 + 5); ucg.print("3");
-    ucg.setPrintPos(_gridXMin - 10, y5 + 5); ucg.print("5");
     ucg.setPrintPos(_gridXMin - 16, _gridYMin + 12); ucg.print("10");
+    ucg.setPrintPos(_gridXMin - 10, y5); ucg.print("5");
+    ucg.setPrintPos(_gridXMin - 10, y3); ucg.print("3");
+    ucg.setPrintPos(_gridXMin - 10, y2); ucg.print("2");
+    ucg.setPrintPos(_gridXMin - 10, _gridYMax-1 ); ucg.print("1");
+}
+
+void refreshValues() {
+    // nad wykresem
+    ucg.setColor(255, 255, 0);
+
+    ucg.setPrintPos(98, _labelsVShift);
+    ucg.print(_lowestSwr, 2);
+
+    ucg.setColor(255, 255, 0);
+    ucg.setPrintPos(149, _labelsVShift);
+    ucg.print(_lowestSwrFrq, 2);
 }
 
 void printScale() {
@@ -266,21 +276,11 @@ void printScale() {
     ucg.print(_frqHigh, (_frqHigh < 10 ? 2 : 1));
 }
 
-void refreshValues() {
-    // nad wykresem
-    int vShift = 15;
-    ucg.setColor(255, 255, 0);
-
-    ucg.setPrintPos(98, vShift);
-    ucg.print(_lowestSwr, 2);
-
-    ucg.setColor(255, 255, 0);
-    ucg.setPrintPos(209, vShift);
-    ucg.print(_lowestSwrFrq, 2);
-}
-
-double checkSWR() {
-    delay(2);
+double checkSWR( double _currFrq) {
+    DDS_SetFrq(_currFrq);
+ 
+    delay(5);
+    
     double FWD = 0;
     double REF = 0;
     double SWR = 10;
