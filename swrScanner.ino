@@ -29,6 +29,7 @@ Ucglib_ILI9341_18x240x320_SWSPI LCD(8, 7, 6, 5, 4); // sclk,data,cd,cs,reset
 int btnAflag = 0;
 int btnBflag = 0;
 
+// wymiary i położenie wykresu
 const int GRID_X_MIN = 22;
 const int GRID_X_MAX = 298;
 
@@ -38,7 +39,8 @@ const int GRID_Y_MAX = 225;
 const int GRID_WIDTH = GRID_X_MAX - GRID_X_MIN;
 const int GRID_HEIGHT = GRID_Y_MAX - GRID_Y_MIN;
 
-const int X_RASTER = 4;
+
+const int X_RASTER = 2; // im większa wartość tym gęsciej mierzony SWR ale wolniejszy przebieg
 const int STEPS = GRID_WIDTH / X_RASTER;
 
 // wartości Y dla różnych poziomów SWR
@@ -98,19 +100,18 @@ void setup() {
 void loop() {
     if (btnAflag == 1) {
         setFullBandScan();
-        printScale();
+        printYScaleLabels();
         btnAflag = 0;
     }
     if (btnBflag == 1) {
          setMinSwrBandScan();
-         printScale();
+         printYScaleLabels();
         btnBflag = 0;
     }
     PerformScan();
 }
 
 void setFullBandScan() {
-
     LCD.setColor(0,255,0);
     LCD.setPrintPos(262, _labelsVShift);
     LCD.print("full-band");
@@ -124,12 +125,11 @@ void setFullBandScan() {
 }
 
 void setMinSwrBandScan() {
-
     LCD.setColor(255,0,0);
     LCD.setPrintPos(262, _labelsVShift);
     LCD.print("min-swr  ");
 
-    const int FREQUENCY_SPAN = 2;
+    const int FREQUENCY_SPAN = 2; // MHZ w górę i w dół od czestotliwosci srodkowej
 
     _frqMid = _lowestSwrFrq;
 
@@ -167,7 +167,7 @@ void PerformScan() {
     int Y = 1;
     int Y2 = 1;
 
-    refreshValuesPre();
+    refreshValuesPreScan();
 
     for (int i = 1; i < STEPS; i++) {
         _currFrq = _frqStart + _frqStep * i;
@@ -210,9 +210,9 @@ void PerformScan() {
         _swrArr[i] = swr;
     }
 
-    refreshValuesPost();
+    refreshValuesPostScan();
 
-    printRezonanses(_frqStep);
+    markRezonanses(_frqStep);
 }
 
 int scaleY(double swr){
@@ -250,8 +250,8 @@ void prepareDisplay() {
     LCD.clearScreen();
     drawGrid();
     printLabels();
-    printScale();
-    refreshValuesPost();
+    printYScaleLabels();
+    refreshValuesPostScan();
 }
 
 void drawGrid() {
@@ -297,14 +297,14 @@ void printLabels() {
     LCD.setPrintPos(GRID_X_MAX + 4, GRID_Y_MAX-1 ); LCD.print("50");
 }
 
-void refreshValuesPre() {
+void refreshValuesPreScan() {
     // nad wykresem
     LCD.setColor(255, 255, 0);
     LCD.setPrintPos(193, _labelsVShift);
     LCD.print(_frqStep * 1000, _frqStep < 100 ? 2 : 1);
 }
 
-void refreshValuesPost() {
+void refreshValuesPostScan() {
     // nad wykresem
     LCD.setColor(255, 255, 0);
 
@@ -315,7 +315,7 @@ void refreshValuesPost() {
     LCD.print(_lowestSwrFrq, (_lowestSwrFrq < 10 ? 2 : 1));
 }
 
-void printScale() {
+void printYScaleLabels() {
     // pod wykresem
     LCD.setColor(255, 255, 255);
     LCD.setColor(255, 255, 255);
@@ -337,13 +337,14 @@ void printScale() {
 double checkSWR( double _currFrq) {
     DDS_SetFrq(_currFrq);
 
-    //delay(2);
+    //delay(2); // czasem trzeba dodac opóżnienie pomiędzy ustawieniem czestotliwosci a rozpoczęciem pomiaru
+                // tutaj opóżnienie realizowane jako czas rysowania kroków wykresu
 
     double FWD = 0;
     double REF = 0;
     double SWR = 10;
 
-    REF = analogRead(A0) - 3; // korekcja
+    REF = analogRead(A0) - 3; // korekcja symetrii układu pomiarowego // dobrać przy 50om
     FWD = analogRead(A1);
 
     REF = REF >= FWD ? FWD - 1 : REF;
@@ -355,34 +356,35 @@ double checkSWR( double _currFrq) {
     return SWR > 10 ? 10 : SWR;
 }
 
-void printRezonanses(double _frqStep){
-    LCD.setFont(ucg_font_5x8_mr);
+void markRezonanses(double _frqStep){
+    // oznaczanie rezonansów/dołków
 
-    // wyświetlanie rezonansów
+    LCD.setFont(ucg_font_5x8_mr);
     LCD.setColor(0,0,0);
     LCD.drawBox(0, GRID_Y_MIN-11, 320, 8);
 
-    const double DETECT_LEVEL = 0.2;
+    const double DETECT_LEVEL = 0.2; // jak bardzo ostre rezonanse mają być wykrywane
+    const int MAX_DETECT_SWR = 6; // pomijamy
+    const int LABELS_SHIFT = -5; // poprostu korekcja przesunięcia labeli
+    const double LABELS_SPREAD_FACTOR = 1.15; // troszkę rozsuwamy labele poza wykres
+    const int LABEL_MIN_DIST = 12; // minimalna odległość wykrytych rezonansów (zeby się nie nakładały)
 
-    const int MAX_DETECT_SWR = 9;
 
-    const int LABELS_SHIFT = -5;
-    const double LABELS_SPREAD_FACTOR = 1.15;
-    const int LABEL_MIN_DIST = 18;
-
-    int holeSeekSpan = (1/(_frqStop - _frqStart)/3 * 150) +2;
+    int holeSeekSpan = (1/(_frqStop - _frqStart)/3 * 150) +2; // też pomaga wykrywać zaokrąglone dołki przy powiększeniu wykresu
+                                                              // działa proporcjonalnie do szerokości zakresu
 
     int X = GRID_X_MIN;
     int prevX = 0;
+
     for (int i = 1; i < STEPS; i++) {
 
         if (_swrArr[i-holeSeekSpan] > _swrArr[i] && _swrArr[i] < _swrArr[i+holeSeekSpan] ) { // wyszukujemy dołek
 
-            if (_swrArr[i-holeSeekSpan] - _swrArr[i] <= DETECT_LEVEL ) continue; // za mało strome zbocze z lewej
-            if (_swrArr[i+holeSeekSpan] - _swrArr[i] <= DETECT_LEVEL) continue; // za mało strome zbocze z prawej
-            if (_swrArr[i] >= MAX_DETECT_SWR) continue; // zbyt duży zwr w dołku. pomijamy.
+            if (_swrArr[i-holeSeekSpan] - _swrArr[i] <= DETECT_LEVEL ) continue; // za mało strome zbocze z lewej / pomijamy
+            if (_swrArr[i+holeSeekSpan] - _swrArr[i] <= DETECT_LEVEL) continue; // za mało strome zbocze z prawej / pomijamy
+            if (_swrArr[i] >= MAX_DETECT_SWR) continue; // zbyt duży swr w dołku. pomijamy.  / pomijamy
 
-            if (X - prevX <= LABEL_MIN_DIST && prevX != 0) continue; // czy nie za blisko poprzedniego
+            if (X - prevX <= LABEL_MIN_DIST && prevX != 0) continue; // czy nie za blisko poprzedniego rezonansu
 
             double fRez = _frqStart + _frqStep * (i+1);
 
@@ -406,6 +408,8 @@ void dump(double var){
 
 double SWRcalibrator(double swr) {
     // kalibracja wskazań
+    // kalibrujemy w kolejnosci: 100,150,200,250,400 ohm
+
     double corr1 = 1.8; // kalibruj na 2 przy 100 omach
     double corr2 = -0.43; // kalibruj na 3 przy 150 omach
     double corr3 = -0.12;  // kalibruj na 4 przy 200 omach
@@ -419,8 +423,8 @@ double SWRcalibrator(double swr) {
     swr += (swr - 7) > 0  ?  (swr - 7) * corr8  :  0; // dla > 8
 
 
-    double frqCorrFactor = 1.5; // siła korekty przechyłu wykresu w funkcji częstotliwości
-    double swrCorrFactor = 7; // siła korekty przechyłu wykresu w funkcji swr
+    double frqCorrFactor = 1.5; // siła korekty przechyłu wykresu w funkcji częstotliwości // doświadczalnie dla róznych SWR-ów i QRG
+    double swrCorrFactor = 7; // siła korekty przechyłu wykresu w funkcji swr // doświadczalnie dla róznych SWR-ów i QRG
 
     double frqCorr = _currFrq * frqCorrFactor / _frqStop  * (swr/swrCorrFactor);
 
