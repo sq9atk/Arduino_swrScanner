@@ -38,7 +38,7 @@ const int GRID_Y_MAX = 225;
 const int GRID_WIDTH = GRID_X_MAX - GRID_X_MIN;
 const int GRID_HEIGHT = GRID_Y_MAX - GRID_Y_MIN;
 
-const int X_RASTER = 2;
+const int X_RASTER = 4;
 const int STEPS = GRID_WIDTH / X_RASTER;
 
 // wartości Y dla różnych poziomów SWR
@@ -58,6 +58,14 @@ void setup() {
 
     LCD.setRotate90();
     LCD.setFont(ucg_font_6x13_mf);
+
+    LCD.clearScreen();
+    LCD.setColor(255,255,0);
+    LCD.setPrintPos(110, 125);
+    LCD.print("Arduino SWR Scanner");
+
+    delay(2500);
+
 
     // buttons
     pinMode(2, OUTPUT);
