@@ -1,31 +1,36 @@
-#include <SPI.h> 
+#include <SPI.h>
 #include <Ucglib.h>
 
-const int FQ_UD = 11; 
-const int SDAT = 10; 
-const int SCLK = 12; 
-const int RESET = 9; 
+const int FQ_UD = 11;
+const int SDAT = 10;
+const int SCLK = 12;
+const int RESET = 9;
 
+const double DDS_FRQ_MIN = 0.5; // MHz
+const double DDS_FRQ_MAX = 32; // MHz
 
 double _swrArr[160] = {10};
 
-double _lowestSwrFrq = 0; 
-double _lowestSwr = 0; 
+double _lowestSwrFrq = 0;
+double _lowestSwr = 0;
 
-double _frqStart = 1; 
-double _frqStop = 30; 
+double _frqStart = DDS_FRQ_MIN;
+double _frqMid = (DDS_FRQ_MIN + DDS_FRQ_MAX) / 2;
+double _frqStop = DDS_FRQ_MAX;
 
-double _currFrq; 
+double _currFrq;
+double _frqStep;
 
 int _labelsVShift = 10;
 
-Ucglib_ILI9341_18x240x320_SWSPI LCD(8, 7, 6, 5, 4); // sclk,data,cd,cs,reset 
+Ucglib_ILI9341_18x240x320_SWSPI LCD(8, 7, 6, 5, 4); // sclk,data,cd,cs,reset
+
 
 int btnAflag = 0;
 int btnBflag = 0;
 
-const int GRID_X_MIN = 22;  
-const int GRID_X_MAX = 298;  
+const int GRID_X_MIN = 22;
+const int GRID_X_MAX = 298;
 
 const int GRID_Y_MIN = 27;
 const int GRID_Y_MAX = 225;
@@ -33,12 +38,8 @@ const int GRID_Y_MAX = 225;
 const int GRID_WIDTH = GRID_X_MAX - GRID_X_MIN;
 const int GRID_HEIGHT = GRID_Y_MAX - GRID_Y_MIN;
 
-const int X_RASTER = 3;
-const int STEPS = GRID_WIDTH / X_RASTER; 
-
-double _frqLow = _frqStart; 
-double _frqMid = (_frqStart + _frqStop) / 2; 
-double _frqHigh = _frqStop;
+const int X_RASTER = 2;
+const int STEPS = GRID_WIDTH / X_RASTER;
 
 // wartości Y dla różnych poziomów SWR
 const int Y_SWR2 = GRID_Y_MAX - GRID_HEIGHT / 9 * 1; //swr 2
@@ -71,36 +72,71 @@ void setup() {
     // analog inputs
     pinMode(A0, INPUT);
     pinMode(A1, INPUT);
-    analogReference(INTERNAL); 
+    analogReference(INTERNAL);
 
     // DDS
     pinMode(FQ_UD, OUTPUT);
     pinMode(SCLK, OUTPUT);
     pinMode(SDAT, OUTPUT);
     pinMode(RESET, OUTPUT);
-    
+
     DDS_init();
 
     prepareDisplay();
+
     setFullBandScan();
 }
 
 void loop() {
     if (btnAflag == 1) {
-        btnAflag = 0;
-        btnBflag = 0;
         setFullBandScan();
         printScale();
-    } 
-    
-    if (btnBflag == 1) {
         btnAflag = 0;
+    }
+    if (btnBflag == 1) {
+         setMinSwrBandScan();
+         printScale();
         btnBflag = 0;
-        setMinSwrBandScan();
-        printScale();
-    } 
-
+    }
     PerformScan();
+}
+
+void setFullBandScan() {
+
+    LCD.setColor(0,255,0);
+    LCD.setPrintPos(262, _labelsVShift);
+    LCD.print("full-band");
+
+    _frqStart = DDS_FRQ_MIN;
+    _frqStop = DDS_FRQ_MAX;
+    _frqMid = (DDS_FRQ_MIN + DDS_FRQ_MAX) / 2;
+
+    _frqStep = (_frqStop - _frqStart) / STEPS;
+
+}
+
+void setMinSwrBandScan() {
+
+    LCD.setColor(255,0,0);
+    LCD.setPrintPos(262, _labelsVShift);
+    LCD.print("min-swr  ");
+
+    const int FREQUENCY_SPAN = 2;
+
+    _frqMid = _lowestSwrFrq;
+
+    if (_frqMid - FREQUENCY_SPAN <  DDS_FRQ_MIN) {
+        _frqMid = DDS_FRQ_MIN + FREQUENCY_SPAN;
+    }
+
+    if (_frqMid + FREQUENCY_SPAN >  DDS_FRQ_MAX) {
+        _frqMid = DDS_FRQ_MAX - FREQUENCY_SPAN;
+    }
+
+    _frqStart = _frqMid - FREQUENCY_SPAN;
+    _frqStop = _frqMid + FREQUENCY_SPAN;
+
+    _frqStep = (_frqStop - _frqStart) / STEPS;
 }
 
 void INT_buttonA() {
@@ -111,61 +147,25 @@ void INT_buttonB() {
     btnBflag = 1;
 }
 
-void setFullBandScan() {
-    LCD.setColor(0, 255, 0);
-    LCD.setPrintPos(255, _labelsVShift); LCD.print("Full-band");
-    
-    _frqStart = 1;
-    _frqStop = 30; 
-    
-    _frqLow = _frqStart; 
-    _frqMid = (_frqStop-_frqStart) / 2; 
-    _frqHigh = _frqStop;
-
-    _lowestSwrFrq = 0; 
-    _lowestSwr = 0;
-}
-
-void setMinSwrBandScan() {
-    
-    const int FREQUENCY_SPAN = 2;
-    
-    if (_lowestSwrFrq < _frqStart-FREQUENCY_SPAN || _lowestSwrFrq > _frqStop-FREQUENCY_SPAN) {
-        _lowestSwrFrq = (_frqStop - _frqStart)/2;
-    }
-    
-    LCD.setColor(255, 0, 0);
-    LCD.setPrintPos(255, _labelsVShift); LCD.print("  Min-SWR");
-        
-    _frqStart = _lowestSwrFrq - FREQUENCY_SPAN; 
-    _frqStop = _lowestSwrFrq + FREQUENCY_SPAN; 
-
-    _frqLow = _frqStart; 
-    _frqMid = _lowestSwrFrq; 
-    _frqHigh = _frqStop; 
-
-    _lowestSwrFrq = 0;
-    _lowestSwr = 0;
-}
-
 void PerformScan() {
-    double frqStep = (_frqStop - _frqStart) / STEPS;
     double prev = 10;
     double prev2 = 10;
     double fix = 10;
     double swr;
-    
+
     _lowestSwr = 10;
-    
+
     int X = GRID_X_MIN + 1;
     int Y = 1;
     int Y2 = 1;
-    
+
+    refreshValuesPre();
+
     for (int i = 1; i < STEPS; i++) {
-        _currFrq = _frqStart + frqStep * i;
+        _currFrq = _frqStart + _frqStep * i;
 
         swr = checkSWR(_currFrq);
-        
+
         if (swr < _lowestSwr && swr > 1) {
             _lowestSwr = swr;
             _lowestSwrFrq = _currFrq;
@@ -173,11 +173,12 @@ void PerformScan() {
 
         int endDrawing = 0;
         int X2 = X + X_RASTER;
-        
+
         if (X2 >= (GRID_X_MAX-1)) {
             X2 = GRID_X_MAX-2;
             endDrawing = 1;
         }
+
         // zamazanie starego wykresu
         Y = scaleY(prev2);
         Y2 = scaleY(_swrArr[i]);
@@ -185,7 +186,7 @@ void PerformScan() {
         LCD.drawLine(X, Y, X2, Y2);
         repairGridLines(X, Y, X2, Y2);
         prev2 = _swrArr[i];
-        
+
         // rysowanie nowego wykresu
         Y = scaleY(prev);
         Y2 = scaleY(swr);
@@ -197,15 +198,15 @@ void PerformScan() {
         if (endDrawing == 1) break;
 
         X += X_RASTER;
-        
+
         _swrArr[i] = swr;
     }
 
-    refreshValues();
-    
-    printRezonanses(frqStep);
+    refreshValuesPost();
+
+    printRezonanses(_frqStep);
 }
- 
+
 int scaleY(double swr){
   int Y = GRID_Y_MAX - (swr-1) * GRID_HEIGHT / 9;
   if (Y <= GRID_Y_MIN) Y = GRID_Y_MIN + 1; // ograniczenie wykresu od góry
@@ -213,30 +214,28 @@ int scaleY(double swr){
   return Y;
 }
 
-
-
 void repairGridLines (int x1, int y1, int x2, int y2) {
     LCD.setColor(0, 200, 0);
-    
+
     // poziome
     if (y1 >= Y_SWR2 && y2 <= Y_SWR2) LCD.drawHLine(x1, Y_SWR2, x2 - x1 + 1);
     if (y1 >= Y_SWR3 && y2 <= Y_SWR3) LCD.drawHLine(x1, Y_SWR3, x2 - x1 + 1);
     if (y1 >= Y_SWR5 && y2 <= Y_SWR5) LCD.drawHLine(x1, Y_SWR5, x2 - x1 + 1);
     if (y1 >= Y_SWR8 && y2 <= Y_SWR8) LCD.drawHLine(x1, Y_SWR8, x2 - x1 + 1);
-    
+
     if (y1 <= Y_SWR2 && y2 >= Y_SWR2) LCD.drawHLine(x1, Y_SWR2, x2 - x1 + 1);
     if (y1 <= Y_SWR3 && y2 >= Y_SWR3) LCD.drawHLine(x1, Y_SWR3, x2 - x1 + 1);
     if (y1 <= Y_SWR5 && y2 >= Y_SWR5) LCD.drawHLine(x1, Y_SWR5, x2 - x1 + 1);
     if (y1 <= Y_SWR8 && y2 >= Y_SWR8) LCD.drawHLine(x1, Y_SWR8, x2 - x1 + 1);
-    
+
     // pionowe
-    if (x1 <= X1_MID && x2 >= X1_MID) LCD.drawLine(X1_MID, y1, X1_MID, y2); 
-    if (x1 <= X2_MID && x2 >= X2_MID) LCD.drawLine(X2_MID, y1, X2_MID, y2); 
-    if (x1 <= X3_MID && x2 >= X3_MID) LCD.drawLine(X3_MID, y1, X3_MID, y2); 
-  
-    if (x1 >= X1_MID && x2 <= X1_MID) LCD.drawLine(X1_MID, y1, X1_MID, y2); 
-    if (x1 >= X2_MID && x2 <= X2_MID) LCD.drawLine(X2_MID, y1, X2_MID, y2); 
-    if (x1 >= X3_MID && x2 <= X3_MID) LCD.drawLine(X3_MID, y1, X3_MID, y2); 
+    if (x1 <= X1_MID && x2 >= X1_MID) LCD.drawLine(X1_MID, y1, X1_MID, y2);
+    if (x1 <= X2_MID && x2 >= X2_MID) LCD.drawLine(X2_MID, y1, X2_MID, y2);
+    if (x1 <= X3_MID && x2 >= X3_MID) LCD.drawLine(X3_MID, y1, X3_MID, y2);
+
+    if (x1 >= X1_MID && x2 <= X1_MID) LCD.drawLine(X1_MID, y1, X1_MID, y2);
+    if (x1 >= X2_MID && x2 <= X2_MID) LCD.drawLine(X2_MID, y1, X2_MID, y2);
+    if (x1 >= X3_MID && x2 <= X3_MID) LCD.drawLine(X3_MID, y1, X3_MID, y2);
 }
 
 void prepareDisplay() {
@@ -244,7 +243,7 @@ void prepareDisplay() {
     drawGrid();
     printLabels();
     printScale();
-    refreshValues();
+    refreshValuesPost();
 }
 
 void drawGrid() {
@@ -267,9 +266,11 @@ void drawGrid() {
 void printLabels() {
     // nad wykresem
     LCD.setColor(255, 255, 255);
-    LCD.setPrintPos(18, _labelsVShift); LCD.print("MIN-SWR 1:");
-    LCD.setPrintPos(123, _labelsVShift); LCD.print("@");
-    LCD.setPrintPos(158, _labelsVShift); LCD.print("MHz");
+    LCD.setPrintPos(2, _labelsVShift); LCD.print("MIN-SWR 1:");
+    LCD.setPrintPos(100, _labelsVShift); LCD.print("@");
+    LCD.setPrintPos(135, _labelsVShift); LCD.print("MHz");
+    LCD.setPrintPos(162, _labelsVShift); LCD.print("Step:");
+    LCD.setPrintPos(232, _labelsVShift); LCD.print("kHz");
 
     // z lewej strony
     LCD.setPrintPos(GRID_X_MIN - 21, GRID_Y_MIN + 6); LCD.print("SWR");
@@ -278,25 +279,31 @@ void printLabels() {
     LCD.setPrintPos(GRID_X_MIN - 9, Y_SWR3 + 4); LCD.print("3");
     LCD.setPrintPos(GRID_X_MIN - 9, Y_SWR2 + 4); LCD.print("2");
     LCD.setPrintPos(GRID_X_MIN - 9, GRID_Y_MAX-1 ); LCD.print("1");
-    
+
     // z prawej strony
     LCD.setPrintPos(GRID_X_MAX + 4, GRID_Y_MIN + 6); LCD.print("Z");
     LCD.setPrintPos(GRID_X_MAX + 4, Y_SWR8 + 4); LCD.print("400");
     LCD.setPrintPos(GRID_X_MAX + 4, Y_SWR5 + 4); LCD.print("250");
     LCD.setPrintPos(GRID_X_MAX + 4, Y_SWR3 + 4); LCD.print("150");
     LCD.setPrintPos(GRID_X_MAX + 4, Y_SWR2 + 4); LCD.print("100");
-    LCD.setPrintPos(GRID_X_MAX + 4, GRID_Y_MAX-1 ); LCD.print("50"); 
+    LCD.setPrintPos(GRID_X_MAX + 4, GRID_Y_MAX-1 ); LCD.print("50");
 }
 
-void refreshValues() {
+void refreshValuesPre() {
+    // nad wykresem
+    LCD.setColor(255, 255, 0);
+    LCD.setPrintPos(193, _labelsVShift);
+    LCD.print(_frqStep * 1000, _frqStep < 100 ? 2 : 1);
+}
+
+void refreshValuesPost() {
     // nad wykresem
     LCD.setColor(255, 255, 0);
 
-    LCD.setPrintPos(80, _labelsVShift);
+    LCD.setPrintPos(63, _labelsVShift);
     LCD.print(_lowestSwr, (_lowestSwr < 10 ? 2 : 1));
 
-    LCD.setColor(255, 255, 0);
-    LCD.setPrintPos(132, _labelsVShift);
+    LCD.setPrintPos(108, _labelsVShift);
     LCD.print(_lowestSwrFrq, (_lowestSwrFrq < 10 ? 2 : 1));
 }
 
@@ -307,30 +314,30 @@ void printScale() {
     int vSpace = 13;
 
     LCD.setPrintPos(GRID_X_MIN, GRID_Y_MAX + vSpace);
-    LCD.print(_frqLow, _frqLow < 10 ? 2 : 1);
+    LCD.print(_frqStart, _frqStart < 10 ? 2 : 1);
 
     LCD.setPrintPos((GRID_X_MAX+GRID_X_MIN)/2-13,  GRID_Y_MAX + vSpace);
     LCD.print(_frqMid, _frqMid < 10 ? 2 : 1);
 
     LCD.setPrintPos(GRID_X_MAX-27,  GRID_Y_MAX + vSpace);
-    LCD.print(_frqHigh, (_frqHigh < 10 ? 2 : 1));
-    
-    LCD.setPrintPos(GRID_X_MAX, GRID_Y_MAX + vSpace); 
+    LCD.print(_frqStop, (_frqStop < 10 ? 2 : 1));
+
+    LCD.setPrintPos(GRID_X_MAX, GRID_Y_MAX + vSpace);
     LCD.print("MHz");
 }
 
 double checkSWR( double _currFrq) {
     DDS_SetFrq(_currFrq);
- 
+
     //delay(2);
-    
+
     double FWD = 0;
     double REF = 0;
     double SWR = 10;
-    
-    REF = analogRead(A0) - 3; // korekcja 
+
+    REF = analogRead(A0) - 3; // korekcja
     FWD = analogRead(A1);
-    
+
     REF = REF >= FWD ? FWD - 1 : REF;
     REF = REF < 1 ? 1 : REF;
 
@@ -340,85 +347,83 @@ double checkSWR( double _currFrq) {
     return SWR > 10 ? 10 : SWR;
 }
 
-void printRezonanses(double frqStep){
+void printRezonanses(double _frqStep){
     LCD.setFont(ucg_font_5x8_mr);
-    
+
     // wyświetlanie rezonansów
     LCD.setColor(0,0,0);
-    LCD.drawBox(16, GRID_Y_MIN-11, 295, 8);
+    LCD.drawBox(0, GRID_Y_MIN-11, 320, 8);
 
     const double DETECT_LEVEL = 0.2;
-    
+
     const int MAX_DETECT_SWR = 9;
-    
+
     const int LABELS_SHIFT = -5;
     const double LABELS_SPREAD_FACTOR = 1.15;
-    const int LABEL_MIN_DIST = 17;
-    
-    
+    const int LABEL_MIN_DIST = 18;
+
     int holeSeekSpan = (1/(_frqStop - _frqStart)/3 * 150) +2;
-    
-    //dump(holeSeekSpan);
-    
+
     int X = GRID_X_MIN;
     int prevX = 0;
     for (int i = 1; i < STEPS; i++) {
-        
+
         if (_swrArr[i-holeSeekSpan] > _swrArr[i] && _swrArr[i] < _swrArr[i+holeSeekSpan] ) { // wyszukujemy dołek
-            
+
             if (_swrArr[i-holeSeekSpan] - _swrArr[i] <= DETECT_LEVEL ) continue; // za mało strome zbocze z lewej
             if (_swrArr[i+holeSeekSpan] - _swrArr[i] <= DETECT_LEVEL) continue; // za mało strome zbocze z prawej
             if (_swrArr[i] >= MAX_DETECT_SWR) continue; // zbyt duży zwr w dołku. pomijamy.
-            
-            if (X - prevX <= LABEL_MIN_DIST && prevX != 0) continue; // czy nie za blisko poprzedniego 
 
-            double fRez = _frqStart + frqStep * (i+1);
-        
+            if (X - prevX <= LABEL_MIN_DIST && prevX != 0) continue; // czy nie za blisko poprzedniego
+
+            double fRez = _frqStart + _frqStep * (i+1);
+
             LCD.setColor(255, 0, 0);
-            LCD.setPrintPos(X * LABELS_SPREAD_FACTOR + LABELS_SHIFT, GRID_Y_MIN-4); 
+            LCD.setPrintPos(X * LABELS_SPREAD_FACTOR + LABELS_SHIFT, GRID_Y_MIN-4);
             LCD.print(fRez, 1);
- 
+
             prevX = X;
         }
-        
+
         X += X_RASTER;
     }
     LCD.setFont(ucg_font_6x13_mf);
 }
 void dump(double var){
-    LCD.setColor(255, 255, 255);
-    LCD.setPrintPos(220, 10); 
-    LCD.print(var);
+    LCD.setColor(255, 0, 255);
+    LCD.setPrintPos(272, 10);
+    LCD.print(var,2);
 }
-    
+
+
 double SWRcalibrator(double swr) {
     // kalibracja wskazań
     double corr1 = 1.8; // kalibruj na 2 przy 100 omach
     double corr2 = -0.43; // kalibruj na 3 przy 150 omach
     double corr3 = -0.12;  // kalibruj na 4 przy 200 omach
     double corr4 = 0.25; // kalibruj na 5 przy 250 omach
-    double corr8 = -0.55; // kalibruj na 8 przy 400 omach 
-    
+    double corr8 = -0.55; // kalibruj na 8 przy 400 omach
+
     swr += (swr - 1) > 0  ?  (swr - 1) * corr1  :  0; // dla > 2
     swr += (swr - 2) > 0  ?  (swr - 2) * corr2  :  0; // dla > 3
     swr += (swr - 3) > 0  ?  (swr - 3) * corr3  :  0; // dla > 4
     swr += (swr - 4) > 0  ?  (swr - 4) * corr4  :  0; // dla > 5
     swr += (swr - 7) > 0  ?  (swr - 7) * corr8  :  0; // dla > 8
-    
-    
-    double frqCorrFactor = 1.5; // siła korekty przechyłu wykresu w funkcji częstotliwości
-    double swrCorrFactor = 7; // siła korekty przechyłu wykresu w funkcji swr 
 
-    double frqCorr = _currFrq * frqCorrFactor / _frqStop  * (swr/swrCorrFactor); 
-    
+
+    double frqCorrFactor = 1.5; // siła korekty przechyłu wykresu w funkcji częstotliwości
+    double swrCorrFactor = 7; // siła korekty przechyłu wykresu w funkcji swr
+
+    double frqCorr = _currFrq * frqCorrFactor / _frqStop  * (swr/swrCorrFactor);
+
     return swr + frqCorr;
 }
 
 void DDS_init() {
     digitalWrite(RESET, HIGH); // DDS Reset Sequence
-    delay(1);                            
+    delay(1);
     digitalWrite(RESET, LOW);
-    digitalWrite(SCLK, HIGH);         
+    digitalWrite(SCLK, HIGH);
     digitalWrite(SCLK, LOW);
     digitalWrite(FQ_UD, HIGH);
     digitalWrite(FQ_UD, LOW);
@@ -426,16 +431,16 @@ void DDS_init() {
 
 void DDS_SetFrq(double Freq_Hz) {
     int32_t f = Freq_Hz * 4294967295 / 125000000  * 1000000;
-    for (int b = 0; b < 4; b++, f >>= 8) { 
+    for (int b = 0; b < 4; b++, f >>= 8) {
         DDS_sendByte(f & 0xFF);
     }
-    DDS_sendByte(0);                
+    DDS_sendByte(0);
     digitalWrite(FQ_UD, HIGH);
     digitalWrite(FQ_UD, LOW);
 }
 
 void DDS_sendByte(byte data_to_send) {
-    for (int i = 0; i < 8; i++, data_to_send >>= 1) { 
+    for (int i = 0; i < 8; i++, data_to_send >>= 1) {
         digitalWrite(SDAT, data_to_send & 0x01);
         digitalWrite(SCLK, HIGH);
         digitalWrite(SCLK, LOW);
