@@ -40,7 +40,7 @@ const int GRID_WIDTH = GRID_X_MAX - GRID_X_MIN;
 const int GRID_HEIGHT = GRID_Y_MAX - GRID_Y_MIN;
 
 
-const int X_RASTER = 2; // im większa wartość tym gęsciej mierzony SWR ale wolniejszy przebieg
+const int X_RASTER = 3; // im większa wartość tym gęsciej mierzony SWR ale wolniejszy przebieg
 const int STEPS = GRID_WIDTH / X_RASTER;
 
 // wartości Y dla różnych poziomów SWR
@@ -321,16 +321,24 @@ void printYScaleLabels() {
     LCD.setColor(255, 255, 255);
     int vSpace = 13;
 
-    LCD.setPrintPos(GRID_X_MIN, GRID_Y_MAX + vSpace);
+    int width = GRID_X_MAX - GRID_X_MIN;
+
+    LCD.setPrintPos(GRID_X_MIN-2, GRID_Y_MAX + vSpace);
     LCD.print(_frqStart, _frqStart < 10 ? 2 : 1);
 
-    LCD.setPrintPos((GRID_X_MAX+GRID_X_MIN)/2-13,  GRID_Y_MAX + vSpace);
-    LCD.print(_frqMid, _frqMid < 10 ? 2 : 1);
+    LCD.setPrintPos(GRID_X_MIN +(width*0.25) - 10,  GRID_Y_MAX + vSpace);
+    LCD.print((_frqStart+_frqMid)/2, (_frqStart+_frqMid)/2 < 10 ? 2 : 1);  
 
-    LCD.setPrintPos(GRID_X_MAX-27,  GRID_Y_MAX + vSpace);
+    LCD.setPrintPos(GRID_X_MIN +(width*0.5) - 10,  GRID_Y_MAX + vSpace);
+    LCD.print(_frqMid, _frqMid < 10 ? 2 : 1);
+    
+    LCD.setPrintPos(GRID_X_MIN +(width*0.75) - 10,  GRID_Y_MAX + vSpace);
+    LCD.print((_frqStop+_frqMid)/2, (_frqStop+_frqMid)/2 < 10 ? 2 : 1);  
+
+    LCD.setPrintPos(GRID_X_MAX-22,  GRID_Y_MAX + vSpace);
     LCD.print(_frqStop, (_frqStop < 10 ? 2 : 1));
 
-    LCD.setPrintPos(GRID_X_MAX, GRID_Y_MAX + vSpace);
+    LCD.setPrintPos(GRID_X_MAX + 5, GRID_Y_MAX + vSpace);
     LCD.print("MHz");
 }
 
@@ -364,7 +372,7 @@ void markRezonanses(double _frqStep){
     LCD.drawBox(0, GRID_Y_MIN-11, 320, 8);
 
     const double DETECT_LEVEL = 0.2; // jak bardzo ostre rezonanse mają być wykrywane
-    const int MAX_DETECT_SWR = 6; // pomijamy
+    const int MAX_DETECT_SWR = 10; // pomijamy
     const int LABELS_SHIFT = -5; // poprostu korekcja przesunięcia labeli
     const double LABELS_SPREAD_FACTOR = 1.15; // troszkę rozsuwamy labele poza wykres
     const int LABEL_MIN_DIST = 12; // minimalna odległość wykrytych rezonansów (zeby się nie nakładały)
