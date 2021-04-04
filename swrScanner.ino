@@ -18,6 +18,9 @@ double _frqStart = DDS_FRQ_MIN;
 double _frqMid = (DDS_FRQ_MIN + DDS_FRQ_MAX) / 2;
 double _frqStop = DDS_FRQ_MAX;
 
+int _scanShift = 0;
+const double SCAN_SPAN = 1.5;// MHZ w górę i w dół od czestotliwosci srodkowej
+
 double _currFrq;
 double _frqStep;
 
@@ -66,7 +69,7 @@ void setup() {
     LCD.setPrintPos(110, 125);
     LCD.print("Arduino SWR Scanner");
 
-    delay(2500);
+    delay(1500);
 
 
     // buttons
@@ -97,53 +100,92 @@ void setup() {
     setFullBandScan();
 }
 
+int _scanMode = 1;
 void loop() {
     if (btnAflag == 1) {
-        setFullBandScan();
-        printYScaleLabels();
+        if (_scanMode == 1) { }
+        if (_scanMode == 2) { }
+        if (_scanMode == 3) {
+           _scanShift += 2 * SCAN_SPAN;   
+        }
         btnAflag = 0;
     }
+    
     if (btnBflag == 1) {
-         setMinSwrBandScan();
-         printYScaleLabels();
+        _scanMode++;
+        if (_scanMode > 3) {
+          _scanMode = 1;
+        }
         btnBflag = 0;
     }
+ 
+    if (_scanMode == 1) { // pełne pasmo
+        setFullBandScan();
+        printYScaleLabels(); 
+        _scanShift = 0;        
+    }
+    if (_scanMode == 2) { // min swr
+        setMinSwrScan(); 
+        printYScaleLabels();
+    }
+    if (_scanMode == 3) {// wycinkami
+        setPartBandScan(); 
+        printYScaleLabels();
+    }
+
     PerformScan();
 }
 
 void setFullBandScan() {
-    LCD.setColor(0,255,0);
+    LCD.setColor(255,255,0);
     LCD.setPrintPos(262, _labelsVShift);
-    LCD.print("full-band");
+    LCD.print("FULL-BAND");
 
     _frqStart = DDS_FRQ_MIN;
     _frqStop = DDS_FRQ_MAX;
     _frqMid = (DDS_FRQ_MIN + DDS_FRQ_MAX) / 2;
 
     _frqStep = (_frqStop - _frqStart) / STEPS;
-
 }
 
-void setMinSwrBandScan() {
-    LCD.setColor(255,0,0);
+void setMinSwrScan() {
+    LCD.setColor(255,255,0);
     LCD.setPrintPos(262, _labelsVShift);
-    LCD.print("min-swr  ");
-
-    const int FREQUENCY_SPAN = 2; // MHZ w górę i w dół od czestotliwosci srodkowej
-
+    LCD.print("MIN-SWR  ");
+    
     _frqMid = _lowestSwrFrq;
-
-    if (_frqMid - FREQUENCY_SPAN <  DDS_FRQ_MIN) {
-        _frqMid = DDS_FRQ_MIN + FREQUENCY_SPAN;
+    
+    if (_frqMid - SCAN_SPAN <  DDS_FRQ_MIN) {
+        _frqMid = DDS_FRQ_MIN + SCAN_SPAN;
     }
 
-    if (_frqMid + FREQUENCY_SPAN >  DDS_FRQ_MAX) {
-        _frqMid = DDS_FRQ_MAX - FREQUENCY_SPAN;
+    if (_frqMid + SCAN_SPAN >  DDS_FRQ_MAX) {
+        _frqMid = DDS_FRQ_MAX - SCAN_SPAN;
     }
 
-    _frqStart = _frqMid - FREQUENCY_SPAN;
-    _frqStop = _frqMid + FREQUENCY_SPAN;
+    _frqStart = _frqMid - SCAN_SPAN;
+    _frqStop = _frqMid + SCAN_SPAN;
+    _frqStep = (_frqStop - _frqStart) / STEPS;
+}
 
+void setPartBandScan() {
+    LCD.setColor(255,255,0);
+    LCD.setPrintPos(262, _labelsVShift);
+    LCD.print("PART-BAND");
+    
+    _frqMid = DDS_FRQ_MIN + SCAN_SPAN;
+    _frqMid += _scanShift;
+    
+    if (_frqMid - SCAN_SPAN <  DDS_FRQ_MIN) {
+        _frqMid = DDS_FRQ_MIN + SCAN_SPAN;
+    }
+
+    if (_frqMid + SCAN_SPAN >  DDS_FRQ_MAX) {
+        _frqMid = DDS_FRQ_MAX - SCAN_SPAN;
+    }
+
+    _frqStart = _frqMid - SCAN_SPAN;
+    _frqStop = _frqMid + SCAN_SPAN;
     _frqStep = (_frqStop - _frqStart) / STEPS;
 }
 
