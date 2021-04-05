@@ -66,8 +66,11 @@ void setup() {
 
     LCD.clearScreen();
     LCD.setColor(255,255,0);
-    LCD.setPrintPos(110, 125);
+    LCD.setPrintPos(110, 118);
     LCD.print("Arduino SWR Scanner");
+    
+    LCD.setPrintPos(132, 132);
+    LCD.print("SQ9ATK 2019");
 
     delay(1500);
 
