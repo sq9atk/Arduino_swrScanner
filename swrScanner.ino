@@ -218,10 +218,12 @@ void PerformScan() {
         _currFrq = _frqStart + _frqStep * i;
 
         swr = checkSWR(_currFrq);
-
-        if (swr < _lowestSwr && swr > 1) {
-            _lowestSwr = swr;
-            _lowestSwrFrq = _currFrq;
+  
+        if (_scanMode == 1 || _scanMode == 3) {
+            if (swr < _lowestSwr && swr > 1) {
+              _lowestSwr = swr;
+              _lowestSwrFrq = _currFrq;
+            }
         }
 
         int endDrawing = 0;
